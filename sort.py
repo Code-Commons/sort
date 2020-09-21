@@ -15,6 +15,15 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
+
+"""
+    Changes were made according to gn1024's suggestion in the github issue:
+    
+    https://github.com/abewley/sort/issues/73
+
+    This is to allow tracking of object instances so reconstitute pose information.
+"""
+
 from __future__ import print_function
 
 import os
@@ -119,6 +128,7 @@ class KalmanBoxTracker(object):
     self.hits = 0
     self.hit_streak = 0
     self.age = 0
+    self.instance_id = bbox[5] # <--- to keep track of instance IDs
 
   def update(self,bbox):
     """
@@ -128,6 +138,7 @@ class KalmanBoxTracker(object):
     self.history = []
     self.hits += 1
     self.hit_streak += 1
+    self.instance_id = bbox[5] # <--- to keep track of instance IDs
     self.kf.update(convert_bbox_to_z(bbox))
 
   def predict(self):
@@ -207,12 +218,12 @@ class Sort(object):
     self.trackers = []
     self.frame_count = 0
 
-  def update(self, dets=np.empty((0, 5))):
+  def update(self, dets=np.empty((0, 6))):
     """
     Params:
-      dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
+      dets - a numpy array of detections in the format [[x1,y1,x2,y2,score,instance_id],[x1,y1,x2,y2,score,instance_id],...]
     Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections).
-    Returns the a similar array, where the last column is the object ID.
+    Returns the a similar array, where the second last column is the object ID instead of score.
 
     NOTE: The number of objects returned may differ from the number of detections provided.
     """
@@ -243,7 +254,7 @@ class Sort(object):
     for trk in reversed(self.trackers):
         d = trk.get_state()[0]
         if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-          ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) # +1 as MOT benchmark requires positive
+          ret.append(np.concatenate((d,[trk.id+1], [trk.instance_id])).reshape(1,-1)) # +1 as MOT benchmark requires positive
         i -= 1
         # remove dead tracklet
         if(trk.time_since_update > self.max_age):
